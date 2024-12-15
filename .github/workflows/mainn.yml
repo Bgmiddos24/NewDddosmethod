@@ -1,51 +1,44 @@
-name: Run LEGEND Workflow
+stages:
+  - compile
+  - test
+  - run
 
-on:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: '0 * * * *'  # Runs at the top of every hour
+# Stage 1: Compile the C Program
+compile_bgmi:
+  stage: compile
+  image: gcc:latest
+  script:
+    - gcc bgmi.c -o bgmi
+    - echo "bgmi.c compiled successfully."
+  artifacts:
+    paths:
+      - bgmi
 
-jobs:
-  run_LEGEND_workflow:
-    runs-on: ubuntu-22.04
+# Stage 2: Test Python Dependencies
+test_python:
+  stage: test
+  image: python:3.9
+  before_script:
+    - pip install flask pyTelegramBotAPI
+  script:
+    - python3 -m compileall keep_alive.py
+    - python3 -m compileall N.py
+    - echo "Python files passed syntax checks."
 
-    steps:
-      - name: Check out the code
-        uses: actions/checkout@v2
-
-      - name: Cache Python dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-python-
-
-      - name: Set up LEGEND binaries
-        run: |
-          chmod +x *
-          chmod +x LEGEND
-          
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: '3.x'
-
-      - name: Install required packages
-        run: |
-          pip install pymongo python-telegram-bot pyTelegramBotAPI certifi
-
-      - name: Run N.py
-        run: python3 N.py
-
-      - name: Run Tests
-        run: |
-          pytest tests/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: LEGEND-artifacts
-          path: path/to/generated/files
+# Stage 3: Run the Applications
+run_application:
+  stage: run
+  image: python:3.9
+  services:
+    - docker:dind
+  before_script:
+    - apt-get update && apt-get install -y gcc
+    - gcc bgmi.c -o bgmi
+    - pip install flask pyTelegramBotAPI
+  script:
+    - python3 keep_alive.py &
+    - python3 N.py &
+    - ./bgmi 127.0.0.1 8080 100
+  only:
+    - main
+    
